@@ -43,102 +43,193 @@ const DEMO_SPOUSE_CONNECTIONS: [string, string][] = [
 
 const NODE_W = 130;
 const NODE_H = 150;
+const NODE_GAP = 20;
+const TREE_GAP = 300;
 
 function buildLayout(members: Member[]) {
   const allIds = new Set(members.map((m) => m.id));
+
   const parentToChildren = new Map<string, string[]>();
   const hasKnownParent = new Set<string>();
-
   for (const m of members) {
     for (const pid of [m.fatherId, m.motherId]) {
       if (pid && allIds.has(pid)) {
         if (!parentToChildren.has(pid)) parentToChildren.set(pid, []);
-        parentToChildren.get(pid)!.push(m.id);
+        const arr = parentToChildren.get(pid)!;
+        if (!arr.includes(m.id)) arr.push(m.id);
         hasKnownParent.add(m.id);
       }
     }
-  }
-
-  const gen = new Map<string, number>();
-  const queue: Array<{ id: string; g: number }> = [];
-  for (const m of members) {
-    if (!hasKnownParent.has(m.id)) queue.push({ id: m.id, g: 0 });
-  }
-  while (queue.length > 0) {
-    const { id, g } = queue.shift()!;
-    if (gen.has(id)) continue;
-    gen.set(id, g);
-    for (const cid of parentToChildren.get(id) ?? []) {
-      if (!gen.has(cid)) queue.push({ id: cid, g: g + 1 });
-    }
-  }
-
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const m of members) {
-      if (m.spouseId && allIds.has(m.spouseId)) {
-        const ga = gen.get(m.id) ?? 0;
-        const gb = gen.get(m.spouseId) ?? 0;
-        if (ga !== gb) {
-          const maxG = Math.max(ga, gb);
-          gen.set(m.id, maxG);
-          gen.set(m.spouseId, maxG);
-          changed = true;
-        }
-      }
-    }
-    for (const [parentId, childIds] of parentToChildren.entries()) {
-      const parentGen = gen.get(parentId) ?? 0;
-      for (const childId of childIds) {
-        if ((gen.get(childId) ?? 0) <= parentGen) {
-          gen.set(childId, parentGen + 1);
-          changed = true;
-        }
-      }
-    }
-  }
-
-  const byGen = new Map<number, string[]>();
-  for (const [id, g] of gen.entries()) {
-    if (!byGen.has(g)) byGen.set(g, []);
-    byGen.get(g)!.push(id);
   }
 
   const spouseOf = new Map<string, string>();
   for (const m of members) {
     if (m.spouseId && allIds.has(m.spouseId)) spouseOf.set(m.id, m.spouseId);
   }
-  for (const [g, ids] of byGen.entries()) {
-    const ordered: string[] = [];
-    const placed = new Set<string>();
-    for (const id of ids) {
-      if (placed.has(id)) continue;
-      ordered.push(id);
-      placed.add(id);
-      const sp = spouseOf.get(id);
-      if (sp && ids.includes(sp) && !placed.has(sp)) {
-        ordered.push(sp);
-        placed.add(sp);
+
+  // BFS from roots to assign generation numbers
+  const gen = new Map<string, number>();
+  const bfsQ: Array<{ id: string; g: number }> = [];
+  for (const m of members) if (!hasKnownParent.has(m.id)) bfsQ.push({ id: m.id, g: 0 });
+  while (bfsQ.length) {
+    const { id, g } = bfsQ.shift()!;
+    if (gen.has(id)) continue;
+    gen.set(id, g);
+    for (const cid of parentToChildren.get(id) ?? []) if (!gen.has(cid)) bfsQ.push({ id: cid, g: g + 1 });
+  }
+
+  // Ensure spouses share a generation and children are strictly below parents
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const m of members) {
+      if (m.spouseId && allIds.has(m.spouseId)) {
+        const ga = gen.get(m.id) ?? 0, gb = gen.get(m.spouseId) ?? 0;
+        if (ga !== gb) {
+          const mx = Math.max(ga, gb);
+          gen.set(m.id, mx); gen.set(m.spouseId, mx); changed = true;
+        }
       }
     }
-    byGen.set(g, ordered);
+    for (const [pid, cids] of parentToChildren) {
+      const pg = gen.get(pid) ?? 0;
+      for (const cid of cids) {
+        if ((gen.get(cid) ?? 0) <= pg) { gen.set(cid, pg + 1); changed = true; }
+      }
+    }
   }
 
-  let maxRowCount = 0;
-  for (const ids of byGen.values()) maxRowCount = Math.max(maxRowCount, ids.length);
-  const canvasWidth = Math.max(700, maxRowCount * NODE_W + 40);
+  // Detect disconnected family trees via undirected BFS (parent-child + spouse edges)
+  const adj = new Map<string, Set<string>>();
+  for (const m of members) adj.set(m.id, new Set());
+  for (const m of members) {
+    for (const pid of [m.fatherId, m.motherId]) {
+      if (pid && allIds.has(pid)) { adj.get(m.id)!.add(pid); adj.get(pid)!.add(m.id); }
+    }
+    if (m.spouseId && allIds.has(m.spouseId)) {
+      adj.get(m.id)!.add(m.spouseId); adj.get(m.spouseId)!.add(m.id);
+    }
+  }
+  const visited = new Set<string>();
+  const components: string[][] = [];
+  for (const m of members) {
+    if (visited.has(m.id)) continue;
+    const comp: string[] = [];
+    const q = [m.id];
+    while (q.length) {
+      const cur = q.shift()!;
+      if (visited.has(cur)) continue;
+      visited.add(cur); comp.push(cur);
+      for (const nb of adj.get(cur) ?? []) if (!visited.has(nb)) q.push(nb);
+    }
+    components.push(comp);
+  }
 
   const positions = new Map<string, { x: number; y: number }>();
-  for (const [g, ids] of byGen.entries()) {
-    const startX = (canvasWidth - ids.length * NODE_W) / 2;
-    ids.forEach((id, i) => {
-      positions.set(id, { x: startX + i * NODE_W, y: g * NODE_H + 20 });
-    });
+  let offsetX = 0;
+
+  for (const compIds of components) {
+    const compSet = new Set(compIds);
+    const minGen = Math.min(...compIds.map((id) => gen.get(id) ?? 0));
+
+    // Group spouses into couple units; sort by generation then id for stable ordering
+    interface CU { primary: string; spouse?: string }
+    const cuMap = new Map<string, string>(); // nodeId → couple-unit primary
+    const cuList: CU[] = [];
+    const paired = new Set<string>();
+    const sortedIds = [...compIds].sort(
+      (a, b) => ((gen.get(a) ?? 0) - (gen.get(b) ?? 0)) || a.localeCompare(b),
+    );
+
+    for (const id of sortedIds) {
+      if (paired.has(id)) continue;
+      const sp = spouseOf.get(id);
+      if (sp && compSet.has(sp) && !paired.has(sp) && gen.get(id) === gen.get(sp)) {
+        cuList.push({ primary: id, spouse: sp });
+        cuMap.set(id, id); cuMap.set(sp, id);
+        paired.add(id); paired.add(sp);
+      } else {
+        cuList.push({ primary: id });
+        cuMap.set(id, id);
+        paired.add(id);
+      }
+    }
+
+    const cuByPrimary = new Map<string, CU>();
+    for (const cu of cuList) cuByPrimary.set(cu.primary, cu);
+
+    // Map each couple unit to its ordered child couple units
+    const cuChildren = new Map<string, string[]>();
+    for (const cu of cuList) cuChildren.set(cu.primary, []);
+    const childAssignedTo = new Map<string, string>(); // childPrimary → parentPrimary
+
+    for (const id of sortedIds) {
+      const pp = cuMap.get(id)!;
+      for (const cid of parentToChildren.get(id) ?? []) {
+        if (!compSet.has(cid)) continue;
+        const cp = cuMap.get(cid)!;
+        if (childAssignedTo.has(cp)) continue;
+        const list = cuChildren.get(pp)!;
+        if (!list.includes(cp)) { list.push(cp); childAssignedTo.set(cp, pp); }
+      }
+    }
+
+    const roots = cuList.filter((cu) => !childAssignedTo.has(cu.primary));
+
+    // Bottom-up: subtree width = max(own slot, sum of children widths + gaps)
+    const swMemo = new Map<string, number>();
+    const subtreeW = (primary: string): number => {
+      if (swMemo.has(primary)) return swMemo.get(primary)!;
+      const cu = cuByPrimary.get(primary)!;
+      const ownW = NODE_W * (cu.spouse ? 2 : 1);
+      const children = cuChildren.get(primary) ?? [];
+      if (!children.length) { swMemo.set(primary, ownW); return ownW; }
+      const childTotalW = children.reduce((s, cp) => s + subtreeW(cp), 0) + NODE_GAP * (children.length - 1);
+      const w = Math.max(ownW, childTotalW);
+      swMemo.set(primary, w);
+      return w;
+    };
+    for (const cu of cuList) subtreeW(cu.primary);
+
+    // Top-down: place each couple unit centered in its allocated slot,
+    // then center children underneath spanning the full slot width
+    const place = (primary: string, left: number) => {
+      const cu = cuByPrimary.get(primary)!;
+      const w = subtreeW(primary);
+      const cx = offsetX + left + w / 2;
+      const y = ((gen.get(primary) ?? 0) - minGen) * NODE_H + 20;
+
+      if (cu.spouse) {
+        // Primary left, spouse right — both symmetrically centered around cx
+        positions.set(primary, { x: cx - NODE_W / 2 - 48, y });
+        positions.set(cu.spouse, { x: cx + NODE_W / 2 - 48, y });
+      } else {
+        positions.set(primary, { x: cx - 48, y });
+      }
+
+      const children = cuChildren.get(primary) ?? [];
+      if (!children.length) return;
+      const totalCW = children.reduce((s, cp) => s + subtreeW(cp), 0) + NODE_GAP * (children.length - 1);
+      let childLeft = left + (w - totalCW) / 2;
+      for (const cp of children) {
+        place(cp, childLeft);
+        childLeft += subtreeW(cp) + NODE_GAP;
+      }
+    };
+
+    let rootLeft = 0;
+    const compW = roots.reduce((s, cu) => s + subtreeW(cu.primary), 0)
+      + NODE_GAP * Math.max(0, roots.length - 1);
+    for (const cu of roots) { place(cu.primary, rootLeft); rootLeft += subtreeW(cu.primary) + NODE_GAP; }
+    offsetX += compW + TREE_GAP;
   }
 
-  const maxGen = byGen.size > 0 ? Math.max(...byGen.keys()) : 0;
-  return { positions, canvasWidth, canvasHeight: (maxGen + 1) * NODE_H + 100 };
+  let maxX = 0, maxY = 0;
+  for (const p of positions.values()) {
+    maxX = Math.max(maxX, p.x + NODE_W);
+    maxY = Math.max(maxY, p.y + NODE_H);
+  }
+  return { positions, canvasWidth: Math.max(700, maxX + 40), canvasHeight: Math.max(750, maxY + 100) };
 }
 
 interface Props {
