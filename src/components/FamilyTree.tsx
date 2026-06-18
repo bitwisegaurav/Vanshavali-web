@@ -245,6 +245,13 @@ export function FamilyTree({ isDark, members, familyName, onViewProfile, highlig
   const [pos, setPos] = useState({ x: 0, y: 60, scale: 0.8 });
   const [selected, setSelected] = useState<TreeMember | null>(null);
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
 
   const isDraggingRef = useRef(false);
   const lastMouseRef = useRef({ x: 0, y: 0 });
@@ -610,11 +617,13 @@ export function FamilyTree({ isDark, members, familyName, onViewProfile, highlig
       {/* Detail panel */}
       {selected && (
         <div style={{
-          position: 'fixed', left: 16, right: 16, bottom: 16,
+          position: 'absolute', left: 16, right: 16, bottom: isMobile ? 80 : 16,
           animation: 'slideUp 0.25s ease',
           zIndex: 30,
           display: 'flex',
           justifyContent: 'center',
+          maxWidth: 600,
+          margin: '0 auto',
         }}>
 
         <div style={{
