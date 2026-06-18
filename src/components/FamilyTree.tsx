@@ -249,6 +249,7 @@ export function FamilyTree({ isDark, members, familyName, onViewProfile, highlig
   const isDraggingRef = useRef(false);
   const lastMouseRef = useRef({ x: 0, y: 0 });
   const didDragRef = useRef(false);
+  const lastPinchDistRef = useRef<number | null>(null);
 
   const { positions, canvasWidth, canvasHeight } = useMemo(
     () => members.length > 0 ? buildLayout(members) : { positions: new Map(), canvasWidth: 700, canvasHeight: 750 },
@@ -336,6 +337,58 @@ export function FamilyTree({ isDark, members, familyName, onViewProfile, highlig
 
   const onMouseUp = useCallback(() => { isDraggingRef.current = false; }, []);
 
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      isDraggingRef.current = true;
+      didDragRef.current = false;
+      lastMouseRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      lastPinchDistRef.current = null;
+    } else if (e.touches.length === 2) {
+      isDraggingRef.current = false;
+      lastPinchDistRef.current = Math.hypot(
+        e.touches[1].clientX - e.touches[0].clientX,
+        e.touches[1].clientY - e.touches[0].clientY,
+      );
+      didDragRef.current = true;
+    }
+  }, []);
+
+  const onTouchEnd = useCallback(() => {
+    isDraggingRef.current = false;
+    lastPinchDistRef.current = null;
+  }, []);
+
+  // Non-passive touchmove so preventDefault() stops the browser from scrolling the page
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const handleTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      if (e.touches.length === 1 && isDraggingRef.current) {
+        const dx = e.touches[0].clientX - lastMouseRef.current.x;
+        const dy = e.touches[0].clientY - lastMouseRef.current.y;
+        if (Math.abs(dx) + Math.abs(dy) > 3) didDragRef.current = true;
+        lastMouseRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        setPos((p) => ({ ...p, x: p.x + dx, y: p.y + dy }));
+      } else if (e.touches.length === 2 && lastPinchDistRef.current !== null) {
+        const t0 = e.touches[0], t1 = e.touches[1];
+        const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+        const factor = dist / lastPinchDistRef.current;
+        const rect = el.getBoundingClientRect();
+        const mx = (t0.clientX + t1.clientX) / 2 - rect.left;
+        const my = (t0.clientY + t1.clientY) / 2 - rect.top;
+        setPos((p) => {
+          const ns = Math.max(0.2, Math.min(3, p.scale * factor));
+          const ratio = ns / p.scale;
+          return { x: mx - (mx - p.x) * ratio, y: my - (my - p.y) * ratio, scale: ns };
+        });
+        lastPinchDistRef.current = dist;
+      }
+    };
+    el.addEventListener('touchmove', handleTouchMove, { passive: false });
+    return () => el.removeEventListener('touchmove', handleTouchMove);
+  }, []);
+
   const onWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     const rect = containerRef.current!.getBoundingClientRect();
@@ -393,8 +446,10 @@ export function FamilyTree({ isDark, members, familyName, onViewProfile, highlig
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
         onWheel={onWheel}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
         onClick={() => { if (!didDragRef.current) setSelected(null); }}
-        style={{ flex: 1, overflow: 'hidden', position: 'relative', cursor: isDraggingRef.current ? 'grabbing' : 'grab', userSelect: 'none' }}
+        style={{ flex: 1, overflow: 'hidden', position: 'relative', cursor: 'grab', userSelect: 'none', touchAction: 'none' }}
       >
         <svg
           width={canvasWidth}
@@ -555,13 +610,11 @@ export function FamilyTree({ isDark, members, familyName, onViewProfile, highlig
       {/* Detail panel */}
       {selected && (
         <div style={{
-          position: 'absolute', left: 16, right: 16, bottom: 16,
+          position: 'fixed', left: 16, right: 16, bottom: 16,
           animation: 'slideUp 0.25s ease',
           zIndex: 30,
           display: 'flex',
           justifyContent: 'center',
-          maxWidth: 600,
-          margin: '0 auto',
         }}>
 
         <div style={{
