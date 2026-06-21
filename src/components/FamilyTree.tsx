@@ -78,10 +78,15 @@ function buildLayout(members: Member[]) {
     for (const cid of parentToChildren.get(id) ?? []) if (!gen.has(cid)) bfsQ.push({ id: cid, g: g + 1 });
   }
 
-  // Ensure spouses share a generation and children are strictly below parents
+  // Ensure spouses share a generation and children are strictly below parents.
+  // Cap iterations to guard against irreconcilable cycles in the data
+  // (e.g. a member listed as both parent AND spouse of the same person).
   let changed = true;
-  while (changed) {
+  let iterations = 0;
+  const MAX_ITER = members.length * 4 + 10;
+  while (changed && iterations < MAX_ITER) {
     changed = false;
+    iterations++;
     for (const m of members) {
       if (m.spouseId && allIds.has(m.spouseId)) {
         const ga = gen.get(m.id) ?? 0, gb = gen.get(m.spouseId) ?? 0;
@@ -95,6 +100,18 @@ function buildLayout(members: Member[]) {
       const pg = gen.get(pid) ?? 0;
       for (const cid of cids) {
         if ((gen.get(cid) ?? 0) <= pg) { gen.set(cid, pg + 1); changed = true; }
+      }
+    }
+  }
+  if (iterations >= MAX_ITER) {
+    console.warn('[buildLayout] generation-leveling did not converge after', MAX_ITER, 'iterations — check for members with conflicting spouseId/fatherId/motherId references (e.g. a person listed as both parent and spouse of the same member)');
+    // Log the conflicting members so we can fix the data
+    for (const m of members) {
+      if (m.spouseId && allIds.has(m.spouseId)) {
+        const sp = members.find(x => x.id === m.spouseId);
+        if (sp && (sp.fatherId === m.id || sp.motherId === m.id || m.fatherId === sp.id || m.motherId === sp.id)) {
+          console.warn('[buildLayout] CONFLICT: member', m.id, m.name, 'is listed as spouse of', sp.id, sp.name, 'but also as their parent — this creates an infinite loop');
+        }
       }
     }
   }
@@ -417,10 +434,10 @@ export function FamilyTree({ isDark, members, familyName, onViewProfile, highlig
 
   function zoomIn() { setPos((p) => ({ ...p, scale: Math.min(p.scale + 0.2, 3) })); }
   function zoomOut() { setPos((p) => ({ ...p, scale: Math.max(p.scale - 0.2, 0.2) })); }
-  function reset() {
+  const reset = useCallback(() => {
     const W = containerRef.current?.clientWidth ?? 800;
     setPos({ x: (W - 0.8 * canvasWidth) / 2, y: 60, scale: 0.8 });
-  }
+  }, [canvasWidth]);
 
   const theme = isDark ? COLORS.dark : COLORS.light;
   const cardBg = theme.card;

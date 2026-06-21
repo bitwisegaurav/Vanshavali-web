@@ -13,11 +13,20 @@ const firebaseConfig = {
 };
 
 export function initFirebase(): void {
-  const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-  _db = getFirestore(app, 'app-db');
+  console.log('[firebase] initFirebase() called');
+  console.log('[firebase] config check — projectId:', firebaseConfig.projectId || '(MISSING)', '| apiKey:', firebaseConfig.apiKey ? '(present)' : '(MISSING)');
+  try {
+    const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+    console.log('[firebase] app initialized, name:', app.name);
+    _db = getFirestore(app, 'app-db');
+    console.log('[firebase] getFirestore() success, _db set:', !!_db);
+  } catch (err) {
+    console.error('[firebase] initFirebase() THREW:', err);
+  }
 }
 
 export function getDb(): Firestore {
+  console.log('[firebase] getDb() called, _db is:', !!_db);
   if (!_db) throw new Error('Firebase not initialized — call initFirebase() first.');
   return _db;
 }
