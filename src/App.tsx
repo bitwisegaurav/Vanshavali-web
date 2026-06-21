@@ -26,10 +26,6 @@ export default function App() {
   const [highlightId, setHighlightId] = useState<string | undefined>();
 
   const { members, loading, error } = useFamily(familyId);
-  console.log('[App] render — familyId:', familyId || '(empty)', '| loading:', loading, '| error:', error, '| members count:', members.length);
-  if (members.length > 0) {
-    console.log('[App] members outside useEffect:', members.map(m => ({ id: m.id, name: m.name })));
-  }
   
   const theme = isDark ? COLORS.dark : COLORS.light;
 
@@ -59,13 +55,6 @@ export default function App() {
   const handleBack = useCallback(() => {
     setView('tree');
   }, []);
-
-  useEffect(() => {
-    console.log('[App] useEffect[members] fired — members count:', members.length);
-    members.forEach(mem => {
-      console.log('[App] member in useEffect:', mem.id, mem.name);
-    });
-  }, [members])
 
   // Family ID setup screen
   if (!familyId) {

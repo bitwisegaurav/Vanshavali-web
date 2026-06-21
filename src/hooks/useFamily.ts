@@ -11,37 +11,23 @@ export function useFamily(familyId: string) {
 
   const loading = Boolean(familyId) && loadedForId !== familyId;
 
-  console.log('[useFamily] render — familyId:', familyId || '(empty)', '| loading:', loading, '| loadedForId:', loadedForId || '(none)', '| members:', members.length, '| error:', error);
-
   useEffect(() => {
-    console.log('[useFamily] effect fired — familyId:', familyId || '(empty)');
-
-    if (!familyId) {
-      console.log('[useFamily] no familyId — skipping subscribe');
-      return;
-    }
-
-    console.log('[useFamily] calling MemberService.subscribe for familyId:', familyId);
+    if (!familyId) return;
 
     const unsubscribe = MemberService.subscribe(
       familyId,
       (m) => {
-        console.log('[useFamily] SUCCESS callback — members received:', m.length, 'for familyId:', familyId);
         setMembers(m);
         setLoadedForId(familyId);
         setError(null);
       },
       (e) => {
-        console.error('[useFamily] ERROR callback for familyId:', familyId, '|', e.message, e);
         setError(e.message ?? 'Failed to load family data.');
         setLoadedForId(familyId);
       },
     );
 
-    console.log('[useFamily] MemberService.subscribe() returned, unsubscribe fn:', typeof unsubscribe);
-
     return () => {
-      console.log('[useFamily] cleanup — unsubscribing for familyId:', familyId);
       unsubscribe();
     };
   }, [familyId]);
