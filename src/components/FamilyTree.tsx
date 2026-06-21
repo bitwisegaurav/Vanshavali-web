@@ -18,28 +18,6 @@ interface TreeMember {
   photoUrl?: string;
 }
 
-const DEMO_TREE: TreeMember[] = [
-  { id: 'g1m', name: 'Bhikhu Mishra', relation: 'Great-grandfather', birth: '1892', alive: false, gender: 'M', color: '#6366F1', x: 300, y: 20 },
-  { id: 'g1f', name: 'Rukmini Mishra', relation: 'Great-grandmother', birth: '1898', alive: false, gender: 'F', color: '#8B5CF6', x: 440, y: 20, spouseId: 'g1m' },
-  { id: 'g2m', name: 'Ramesh Mishra', relation: 'Grandfather', birth: '1920', alive: false, gender: 'M', color: '#6366F1', x: 220, y: 160 },
-  { id: 'g2f', name: 'Savitri Mishra', relation: 'Grandmother', birth: '1925', alive: false, gender: 'F', color: '#8B5CF6', x: 360, y: 160, spouseId: 'g2m' },
-  { id: 'g3m', name: 'Ravi Mishra', relation: 'Father', birth: '1955', alive: true, gender: 'M', color: '#4F46E5', x: 120, y: 300 },
-  { id: 'g3f', name: 'Sunita Mishra', relation: 'Mother', birth: '1958', alive: true, gender: 'F', color: '#7C3AED', x: 260, y: 300, spouseId: 'g3m' },
-  { id: 'g3u', name: 'Suresh Mishra', relation: 'Uncle', birth: '1960', alive: true, gender: 'M', color: '#4F46E5', x: 400, y: 300 },
-  { id: 'g4s1', name: 'Amit Mishra', relation: 'You', birth: '1982', alive: true, gender: 'M', color: '#4F46E5', x: 60, y: 440 },
-  { id: 'g4s1w', name: 'Meera Mishra', relation: 'Spouse', birth: '1985', alive: true, gender: 'F', color: '#7C3AED', x: 200, y: 440, spouseId: 'g4s1' },
-  { id: 'g4s2', name: 'Neha Mishra', relation: 'Sister', birth: '1985', alive: true, gender: 'F', color: '#8B5CF6', x: 340, y: 440 },
-  { id: 'g5c1', name: 'Arjun Mishra', relation: 'Son', birth: '2018', alive: true, gender: 'M', color: '#06B6D4', x: 60, y: 580 },
-  { id: 'g5c2', name: 'Priya Mishra', relation: 'Daughter', birth: '2020', alive: true, gender: 'F', color: '#EC4899', x: 200, y: 580 },
-];
-
-const DEMO_CONNECTIONS: [string, string][] = [
-  ['g1m', 'g2m'], ['g2m', 'g3m'], ['g2m', 'g3u'],
-  ['g3m', 'g4s1'], ['g3m', 'g4s2'], ['g4s1', 'g5c1'], ['g4s1', 'g5c2'],
-];
-const DEMO_SPOUSE_CONNECTIONS: [string, string][] = [
-  ['g1m', 'g1f'], ['g2m', 'g2f'], ['g3m', 'g3f'], ['g4s1', 'g4s1w'],
-];
 
 const NODE_W = 130;
 const NODE_H = 150;
@@ -280,12 +258,12 @@ export function FamilyTree({ isDark, members, familyName, onViewProfile, highlig
             photoUrl: m.photoUrl,
           };
         })
-      : DEMO_TREE,
+      : [],
     [members, positions],
   );
 
   const { parentChildConns, spouseConns } = useMemo(() => {
-    if (members.length === 0) return { parentChildConns: DEMO_CONNECTIONS, spouseConns: DEMO_SPOUSE_CONNECTIONS };
+    if (members.length === 0) return { parentChildConns: [] as [string, string][], spouseConns: [] as [string, string][] };
     const allIds = new Set(members.map((m) => m.id));
     const pc: [string, string][] = [];
     for (const m of members) {
@@ -316,7 +294,7 @@ export function FamilyTree({ isDark, members, familyName, onViewProfile, highlig
 
   // Highlight member navigated from profile
   useEffect(() => {
-    if (!highlightMemberId || treeNodes === DEMO_TREE) return;
+    if (!highlightMemberId || treeNodes.length === 0) return;
     const node = treeNodes.find((n) => n.id === highlightMemberId);
     if (!node || !containerRef.current) return;
     setSelected(node);
@@ -441,13 +419,21 @@ export function FamilyTree({ isDark, members, familyName, onViewProfile, highlig
           <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 2 }}>Family Tree</div>
           <div style={{ fontSize: 24, fontWeight: 700, color: theme.text }}>{familyName}</div>
         </div>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 6, borderRadius: 20,
-          padding: '4px 12px', border: `1px solid ${theme.border}`, background: theme.card,
-        }}>
-          <Users size={14} color={theme.textMuted} />
-          <span style={{ fontSize: 13, color: theme.text, fontWeight: 500 }}>{treeNodes.length}</span>
-        </div>
+        {members.length > 0 ? (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6, borderRadius: 20,
+            padding: '4px 12px', border: `1px solid ${theme.border}`, background: theme.card,
+          }}>
+            <Users size={14} color={theme.textMuted} />
+            <span style={{ fontSize: 13, color: theme.text, fontWeight: 500 }}>{treeNodes.length}</span>
+          </div>
+        ) : (
+          <div style={{
+            width: 64, height: 28, borderRadius: 20,
+            background: isDark ? '#2A2D35' : '#E4E6EA',
+            animation: 'skeleton-pulse 1.5s ease-in-out infinite',
+          }} />
+        )}
       </div>
 
       {/* Canvas */}
@@ -460,8 +446,23 @@ export function FamilyTree({ isDark, members, familyName, onViewProfile, highlig
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
         onClick={() => { if (!didDragRef.current) setSelected(null); }}
-        style={{ flex: 1, overflow: 'hidden', position: 'relative', cursor: 'grab', userSelect: 'none', touchAction: 'none' }}
+        style={{ flex: 1, overflow: 'hidden', position: 'relative', cursor: members.length === 0 ? 'default' : 'grab', userSelect: 'none', touchAction: 'none' }}
       >
+        {members.length === 0 && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 48, gap: 28, pointerEvents: 'none' }}>
+            {([2, 3, 4] as const).map((count, row) => (
+              <div key={row} style={{ display: 'flex', gap: 12 }}>
+                {Array.from({ length: count }).map((_, i) => (
+                  <div key={i} style={{
+                    width: 90, height: 82, borderRadius: 18,
+                    background: isDark ? '#2A2D35' : '#E4E6EA',
+                    animation: `skeleton-pulse 1.5s ease-in-out ${(row * count + i) * 0.08}s infinite`,
+                  }} />
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
         <svg
           width={canvasWidth}
           height={canvasHeight}
@@ -482,7 +483,7 @@ export function FamilyTree({ isDark, members, familyName, onViewProfile, highlig
           </defs>
 
           {/* Parent-child connections */}
-          {parentChildConns.map(([from, to]) => {
+          {parentChildConns.map(([from, to]: [string, string]) => {
             const f = getMember(from);
             const t = getMember(to);
             if (!f || !t) return null;
@@ -500,7 +501,7 @@ export function FamilyTree({ isDark, members, familyName, onViewProfile, highlig
           })}
 
           {/* Spouse connections */}
-          {spouseConns.map(([a, b]) => {
+          {spouseConns.map(([a, b]: [string, string]) => {
             const ma = getMember(a);
             const mb = getMember(b);
             if (!ma || !mb) return null;
