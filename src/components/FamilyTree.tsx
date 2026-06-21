@@ -300,6 +300,7 @@ export function FamilyTree({ isDark, members, familyName, onViewProfile, highlig
         if (!seen.has(key)) { seen.add(key); sp.push([m.id, m.spouseId]); }
       }
     }
+
     return { parentChildConns: pc, spouseConns: sp };
   }, [members]);
 
@@ -391,22 +392,27 @@ export function FamilyTree({ isDark, members, familyName, onViewProfile, highlig
         lastPinchDistRef.current = dist;
       }
     };
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const factor = e.deltaY > 0 ? 0.9 : 1.1;
+      setPos((p) => {
+        const ns = Math.max(0.2, Math.min(3, p.scale * factor));
+        const ratio = ns / p.scale;
+        return { x: mx - (mx - p.x) * ratio, y: my - (my - p.y) * ratio, scale: ns };
+      });
+    };
+
     el.addEventListener('touchmove', handleTouchMove, { passive: false });
-    return () => el.removeEventListener('touchmove', handleTouchMove);
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      el.removeEventListener('touchmove', handleTouchMove);
+      el.removeEventListener('wheel', handleWheel);
+    };
   }, []);
 
-  const onWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    const rect = containerRef.current!.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const factor = e.deltaY > 0 ? 0.9 : 1.1;
-    setPos((p) => {
-      const ns = Math.max(0.2, Math.min(3, p.scale * factor));
-      const ratio = ns / p.scale;
-      return { x: mx - (mx - p.x) * ratio, y: my - (my - p.y) * ratio, scale: ns };
-    });
-  }, []);
 
   const handleNodeClick = useCallback((e: React.MouseEvent, node: TreeMember) => {
     e.stopPropagation();
@@ -451,7 +457,6 @@ export function FamilyTree({ isDark, members, familyName, onViewProfile, highlig
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
-        onWheel={onWheel}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
         onClick={() => { if (!didDragRef.current) setSelected(null); }}
@@ -568,20 +573,9 @@ export function FamilyTree({ isDark, members, familyName, onViewProfile, highlig
 
         {/* Zoom controls */}
         <div style={{ position: 'absolute', right: 16, top: 16, display: 'flex', flexDirection: 'column', gap: 8, zIndex: 20 }}>
-          {[
-            { icon: ZoomIn, action: zoomIn },
-            { icon: ZoomOut, action: zoomOut },
-            { icon: Maximize2, action: reset },
-          ].map(({ icon: Icon, action }, i) => (
-            <button key={i} onClick={(e) => { e.stopPropagation(); action(); }}
-              style={{
-                width: 36, height: 36, borderRadius: 12, border: `1px solid ${theme.border}`,
-                background: theme.card, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-              }}>
-              <Icon size={15} color={theme.text} />
-            </button>
-          ))}
+          <button onClick={(e) => { e.stopPropagation(); zoomIn(); }} style={{ width: 36, height: 36, borderRadius: 12, border: `1px solid ${theme.border}`, background: theme.card, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}><ZoomIn size={15} color={theme.text} /></button>
+          <button onClick={(e) => { e.stopPropagation(); zoomOut(); }} style={{ width: 36, height: 36, borderRadius: 12, border: `1px solid ${theme.border}`, background: theme.card, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}><ZoomOut size={15} color={theme.text} /></button>
+          <button onClick={(e) => { e.stopPropagation(); reset(); }} style={{ width: 36, height: 36, borderRadius: 12, border: `1px solid ${theme.border}`, background: theme.card, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}><Maximize2 size={15} color={theme.text} /></button>
         </div>
 
         {/* Legend */}
